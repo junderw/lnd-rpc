@@ -1,0 +1,32 @@
+import * as grpc from 'grpc';
+import { RpcResponse } from './types';
+export declare class LightningRpc {
+    meta: grpc.Metadata;
+    mainRpc: any;
+    unlockerRpc: any;
+    domainPort: string;
+    credentials: grpc.ChannelCredentials;
+    lnrpc: any;
+    constructor(tls_cert: string, macaroon_hex: string, domain_port?: string);
+    static fromStrings(tls_cert: string, macaroon_hex: string, domain_port?: string): LightningRpc;
+    static fromFilePaths(tls_cert_path: string, macaroon_path: string, domain_port?: string): LightningRpc;
+    toMain(): void;
+    toUnlocker(): void;
+    create(walletPw: string, aezeedPw?: string): Promise<RpcResponse>;
+    unlock(password: string): Promise<RpcResponse>;
+    send(payment_request: string): Promise<RpcResponse>;
+    open(node_pubkey_string: string, local_funding_amount: number, push_sat: number): Promise<RpcResponse>;
+    request(satoshis: number): Promise<RpcResponse>;
+    check(r_hash_str: string): Promise<RpcResponse>;
+    getInfo(opts: any): Promise<RpcResponse>;
+    listChannels(opts: any): Promise<Array<any>>;
+    channelBalance(opts: any): Promise<RpcResponse>;
+    channelBandwidth(): Promise<RpcResponse>;
+    walletBalance(opts: any): Promise<RpcResponse>;
+    newAddress(opts: any): Promise<RpcResponse>;
+    openChannel(opts: any): Promise<RpcResponse>;
+    sendPayment(opts: any): Promise<RpcResponse>;
+    addInvoice(opts: any): Promise<RpcResponse>;
+    lookupInvoice(opts: any): Promise<RpcResponse>;
+    decodePayReq(opts: any): Promise<RpcResponse>;
+}

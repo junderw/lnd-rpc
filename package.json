@@ -1,0 +1,36 @@
+{
+  "name": "lnd-rpc",
+  "version": "0.0.1",
+  "description": "",
+  "main": "src/client.js",
+  "types": "types/client.d.ts",
+  "files": [
+    "src",
+    "types"
+  ],
+  "scripts": {
+    "build": "tsc -p ./tsconfig.json",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/junderw/lnd-rpc.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/junderw/lnd-rpc/issues"
+  },
+  "homepage": "https://github.com/junderw/lnd-rpc#readme",
+  "devDependencies": {
+    "typescript": "3.3.3"
+  },
+  "dependencies": {
+    "@grpc/proto-loader": "^0.4.0",
+    "@types/node": "11.9.3",
+    "assert": "^1.4.1",
+    "bolt11": "^1.2.4",
+    "grpc": "^1.18.0"
+  }
+}
