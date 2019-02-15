@@ -3,6 +3,7 @@ import * as path from 'path'
 import * as fs from 'fs'
 import * as grpc from 'grpc'
 import * as protoLoader from '@grpc/proto-loader'
+import * as Long from 'long'
 import * as lnPayReq from 'bolt11'
 import { RpcResponse, CreateResponse, RestoreResponse,
         UnlockResponse, ChangePasswordResponse, SendResponse, ChannelPoint,
@@ -19,16 +20,16 @@ export class LightningRpc {
   private __credentials: grpc.ChannelCredentials
   private __lnrpc: any
 
-  constructor (tls_cert: string, macaroon_hex: string, domain_port?: string) {
-    this.__domainPort = domain_port || '127.0.0.1:10009'
+  constructor (tlsCert: string, macaroonHex: string, domainPort?: string) {
+    this.__domainPort = domainPort || '127.0.0.1:10009'
 
-    tls_cert = tls_cert.replace("-----BEGIN CERTIFICATE-----","-----BEGIN CERTIFICATE-----\n")
-    tls_cert = tls_cert.replace("-----END CERTIFICATE-----","\n-----END CERTIFICATE-----")
+    tlsCert = tlsCert.replace("-----BEGIN CERTIFICATE-----","-----BEGIN CERTIFICATE-----\n")
+    tlsCert = tlsCert.replace("-----END CERTIFICATE-----","\n-----END CERTIFICATE-----")
 
-    this.__credentials = grpc.credentials.createSsl(Buffer.from(tls_cert, 'utf8'))
+    this.__credentials = grpc.credentials.createSsl(Buffer.from(tlsCert, 'utf8'))
 
     const meta = new grpc.Metadata()
-    meta.add('macaroon', macaroon_hex)
+    meta.add('macaroon', macaroonHex)
     this.__meta = meta
 
     const protoData = protoLoader.loadSync(path.join(__dirname, '/rpc.proto'))
@@ -39,14 +40,14 @@ export class LightningRpc {
     this.__unlockerRpc = new this.__lnrpc.WalletUnlocker(this.__domainPort, this.__credentials)
   }
 
-  static fromStrings (tls_cert: string, macaroon_hex: string, domain_port?: string): LightningRpc {
-    return new LightningRpc(tls_cert.replace(/[\r\n]/g, ''), macaroon_hex, domain_port)
+  static fromStrings (tlsCert: string, macaroonHex: string, domainPort?: string): LightningRpc {
+    return new LightningRpc(tlsCert.replace(/[\r\n]/g, ''), macaroonHex, domainPort)
   }
 
-  static fromFilePaths (tls_cert_path: string, macaroon_path: string, domain_port?: string): LightningRpc {
-    const tls_cert = fs.readFileSync(tls_cert_path).toString('utf8').replace(/[\r\n]/g, '')
-    const macaroon_hex = fs.readFileSync(macaroon_path).toString('hex')
-    return new LightningRpc(tls_cert, macaroon_hex, domain_port)
+  static fromFilePaths (tlsCertPath: string, macaroonPath: string, domainPort?: string): LightningRpc {
+    const tlsCert = fs.readFileSync(tlsCertPath).toString('utf8').replace(/[\r\n]/g, '')
+    const macaroonHex = fs.readFileSync(macaroonPath).toString('hex')
+    return new LightningRpc(tlsCert, macaroonHex, domainPort)
   }
 
   toMain(): void {
@@ -114,28 +115,38 @@ export class LightningRpc {
   // async / await, but for some of the more common operations I will create
   // helper functions for convenience.
 
-  async send( payment_request: string ): Promise<SendResponse> {
+  async send( paymentRequest: string ): Promise<SendResponse> {
     assert(this.__mainRpc, 'send requires toMain()')
-    let res = await this.sendPayment({ payment_request })
-    return Object.assign(res, { decodedPayReq: lnPayReq.decode(payment_request) })
+    let res = await this.sendPayment({ paymentRequest })
+    return Object.assign(res, { decodedPayReq: lnPayReq.decode(paymentRequest) })
   }
 
-  async open( node_pubkey_string: string, local_funding_amount: number, push_sat: number ): Promise<ChannelPoint> {
+  async open( nodePubkeyString: string, localFundingAmount: number, pushSat: number ): Promise<ChannelPoint> {
     assert(this.__mainRpc, 'open requires toMain()')
-    let opts = {node_pubkey_string, local_funding_amount}
-    if (push_sat !== undefined) opts = Object.assign(opts, { push_sat })
+    let opts = {nodePubkeyString, localFundingAmount: Long.fromNumber(localFundingAmount)}
+    if (pushSat !== undefined) opts = Object.assign(opts, { pushSat })
     return this.openChannel(opts)
   }
 
   async request( satoshis: number ): Promise<RequestResponse> {
     assert(this.__mainRpc, 'request requires toMain()')
-    return this.addInvoice({ value: satoshis })
+    return this.addInvoice({ value: Long.fromNumber(satoshis) })
   }
 
-  async check( r_hash_str: string ): Promise<Invoice> {
+  async check( rHashStr: string ): Promise<Invoice> {
     assert(this.__mainRpc, 'check requires toMain()')
-    return this.lookupInvoice({ r_hash_str })
+    return this.lookupInvoice({ rHashStr })
   }
+
+  async channelBandwidth (): Promise<ChannelBandwidthResponse> {
+    assert(this.__mainRpc, 'channelBandwidth requires toMain()')
+    return this.listChannels({activeOnly: true})
+      .then(response => ({
+        bandwidth: response.channels.reduce((total, item) => { return total.add(item.remoteBalance) }, Long.fromInt(0))
+      }))
+  }
+
+  // Lightning service direct RPC calls
 
   async getInfo (): Promise<GetInfoResponse> {
     assert(this.__mainRpc, 'getInfo requires toMain()')
@@ -156,14 +167,6 @@ export class LightningRpc {
     return new Promise((resolve, reject) => {
       this.__mainRpc.channelBalance({}, this.__meta, promiseFunction(resolve, reject))
     })
-  }
-
-  async channelBandwidth (): Promise<ChannelBandwidthResponse> {
-    assert(this.__mainRpc, 'channelBandwidth requires toMain()')
-    return this.listChannels({active_only: true})
-      .then(response => ({
-        bandwidth: response.channels.reduce((total, item) => { return total + item.remote_balance }, 0)
-      }))
   }
 
   async walletBalance (): Promise<WalletBalanceResponse> {
@@ -202,8 +205,8 @@ export class LightningRpc {
   async openChannel (opts: OpenChannelRequest): Promise<ChannelPoint> {
     assert(this.__mainRpc, 'openChannel requires toMain()')
     assert(opts, 'openChannel requires opts')
-    assert(opts.node_pubkey || opts.node_pubkey_string, 'openChannel requires node_pubkey or string')
-    assert(opts.local_funding_amount, 'openChannel requires opts.local_funding_amount')
+    assert(opts.nodePubkey || opts.nodePubkeyString, 'openChannel requires nodePubkey or string')
+    assert(opts.localFundingAmount, 'openChannel requires opts.localFundingAmount')
     return new Promise((resolve, reject) => {
       this.__mainRpc.openChannelSync(opts, this.__meta, promiseFunction(resolve, reject))
     })
@@ -212,7 +215,7 @@ export class LightningRpc {
   async sendPayment (opts: SendRequest): Promise<SendResponse> {
     assert(this.__mainRpc, 'sendPayment requires toMain()')
     assert(opts, 'sendPayment requires opts')
-    assert(opts.payment_request, 'sendPayment requires opts.payment_request')
+    assert(opts.paymentRequest, 'sendPayment requires opts.paymentRequest')
     return new Promise((resolve, reject) => {
       this.__mainRpc.sendPaymentSync(opts, this.__meta, promiseFunction(resolve, reject))
     })
@@ -230,7 +233,7 @@ export class LightningRpc {
   async lookupInvoice (opts: PaymentHash): Promise<Invoice> {
     assert(this.__mainRpc, 'lookupInvoice requires toMain()')
     assert(opts, 'lookupInvoice requires opts')
-    assert(opts.r_hash_str, 'lookupInvoice requires opts.r_hash_str')
+    assert(opts.rHashStr, 'lookupInvoice requires opts.rHashStr')
     return new Promise((resolve, reject) => {
       this.__mainRpc.lookupInvoice(opts, this.__meta, promiseFunction(resolve, reject))
     })
@@ -239,14 +242,14 @@ export class LightningRpc {
   async decodePayReq (opts: PayReqString): Promise<PayReq> {
     assert(this.__mainRpc, 'decodePayReq requires toMain()')
     assert(opts, 'decodePayReq requires opts')
-    assert(opts.pay_req, 'decodePayReq requires opts.pay_req')
+    assert(opts.payReq, 'decodePayReq requires opts.payReq')
     return new Promise((resolve, reject) => {
       this.__mainRpc.decodePayReq(opts, this.__meta, promiseFunction(resolve, reject))
     })
   }
 }
 
-function convertBufferToHex (response: RpcResponse) {
+function convertBufferToHex (response: RpcResponse): RpcResponse {
   Object.keys(response).forEach(key => {
     if (response[key] instanceof Buffer) {
       response[key] = (<Buffer>response[key]).toString('hex')

@@ -1,4 +1,5 @@
 import { PaymentRequestObject } from 'bolt11'
+import * as Long from 'long'
 
 export type RpcResponse = {
   [key: string]: any
@@ -13,115 +14,115 @@ export type UnlockResponse = {}
 export type ChangePasswordResponse = {}
 
 type Hop = {
-  chan_id: number
-  chan_capacity: number
+  chanId: Long
+  chanCapacity: Long
   expiry: number
-  amt_to_forward_msat: number
-  fee_msat: number
-  pub_key?: string
+  amtToForwardMsat: Long
+  feeMsat: Long
+  pubKey?: string
 }
 
 type Route = {
-  total_time_lock: number
-  total_fees_msat: number
-  total_amt_msat: number
+  totalTimeLock: number
+  totalFeesMsat: Long
+  totalAmtMsat: Long
   hops: Array<Hop>
 }
 
 export type SendResponse = {
-  payment_error: string
-  payment_preimage: Buffer
-  payment_route: Route
+  paymentError: string
+  paymentPreimage: Buffer
+  paymentRoute: Route
   decodedPayReq?: PaymentRequestObject
 }
 
 export type ChannelPoint = {
-  funding_txid_bytes?: Buffer
-  funding_txid_str?: string
-  output_index: number
+  fundingTxidBytes?: Buffer
+  fundingTxidStr?: string
+  outputIndex: number
 }
 
 export type RequestResponse = {
-  r_hash: Buffer
-  payment_request: string
-  add_index: number
+  rHash: Buffer
+  paymentRequest: string
+  addIndex: Long
 }
 
 type HopHint = {
-  node_id: string
-  chan_id: number
-  fee_base_msat: number
-  fee_proportional_millionths: number
-  cltv_expiry_delta: number
+  nodeId: string
+  chanId: Long
+  feeBaseMsat: number
+  feeProportionalMillionths: number
+  cltvExpiryDelta: number
 }
 
 type RouteHint = {
-  hop_hints: Array<HopHint>
+  hopHints: Array<HopHint>
 }
 
 export type Invoice = {
   memo?: string
   receipt?: Buffer
-  r_preimage?: Buffer
-  r_hash?: Buffer
-  value?: number
+  rPreimage?: Buffer
+  rHash?: Buffer
+  value?: Long
   settled?: boolean
-  creation_date?: number
-  settle_date?: number
-  payment_request?: string
-  description_hash?: Buffer
-  expiry?: number
-  fallback_addr?: string
-  cltv_expiry?: number
-  route_hints?: Array<RouteHint>
+  creationDate?: Long
+  settleDate?: Long
+  paymentRequest?: string
+  descriptionHash?: Buffer
+  expiry?: Long
+  fallbackAddr?: string
+  cltvExpiry?: Long
+  routeHints?: Array<RouteHint>
   private?: boolean
-  add_index?: number
-  settle_index?: number
-  amt_paid_sat?: number
-  amt_paid_msat?: number
+  addIndex?: Long
+  settleIndex?: Long
+  amtPaidSat?: Long
+  amtPaidMsat?: Long
 }
 
 export type GetInfoResponse = {
-  identity_pubkey: string
+  identityPubkey: string
   alias: string
-  num_pending_channels: number
-  num_active_channels: number
-  num_peers: number
-  block_height: number
-  block_hash: string
-  synced_to_chain: boolean
-  testnet: boolean
+  numPendingChannels?: number
+  numActiveChannels?: number
+  numPeers?: number
+  blockHeight?: number
+  blockHash: string
+  syncedToChain?: boolean
+  testnet?: boolean
   chains: Array<string>
-  uris: Array<string>
-  best_header_timestamp: number
+  uris?: Array<string>
+  bestHeaderTimestamp: Long
   version: string
-  num_inactive_channels: number
+  numInactiveChannels?: number
 }
 
 type HTLC = {
   incoming: boolean
-  amount: number
-  hash_lock: Buffer
-  expiration_height: number
+  amount: Long
+  hashLock: Buffer
+  expirationHeight: number
 }
 
 type Channel = {
   active: boolean
-  remote_pubkey: string
-  channel_point: string
-  chan_id: number
-  capacity: number
-  local_balance: number
-  remote_balance: number
-  commit_fee: number
-  commit_weight: number
-  fee_per_kw: number
-  unsettled_balance: number
-  total_satoshis_sent: number
-  total_satoshis_received: number
-  num_updates: number
-  pending_htlcs: Array<HTLC>
-  csv_delay: number
+  remotePubkey: string
+  channelPoint: string
+  chanId: Long
+  capacity: Long
+  localBalance: Long
+  remoteBalance: Long
+  commitFee: Long
+  commitWeight: Long
+  feePerKw: Long
+  unsettledBalance: Long
+  totalSatoshisSent: Long
+  totalSatoshisReceived: Long
+  numUpdates: Long
+  pendingHtlcs: Array<HTLC>
+  csvDelay: number
   private: boolean
 }
 
@@ -130,60 +131,60 @@ export type ListChannelsResponse = {
 }
 
 export type ListChannelsRequest = {
-  active_only?: boolean
-  inactive_only?: boolean
-  public_only?: boolean
-  private_only?: boolean
+  activeOnly?: boolean
+  inactiveOnly?: boolean
+  publicOnly?: boolean
+  privateOnly?: boolean
 }
 
 export type OpenChannelRequest = {
-  node_pubkey?: Buffer
-  node_pubkey_string?: string
-  local_funding_amount: number
-  push_sat?: number
-  target_conf?: number
-  sat_per_byte?: number
+  nodePubkey?: Buffer
+  nodePubkeyString?: string
+  localFundingAmount: Long
+  pushSat?: Long
+  targetConf?: number
+  satPerByte?: Long
   private?: boolean
-  min_htlc_msat?: number
-  remote_csv_delay?: number
-  min_confs?: number
-  spend_unconfirmed?: boolean
+  minHtlcMsat?: Long
+  remoteCsvDelay?: number
+  minConfs?: number
+  spendUnconfirmed?: boolean
 }
 
 type FeeLimit = {
-  fixed?: number
-  percent?: number
+  fixed?: Long
+  percent?: Long
 }
 
 export type SendRequest = {
   dest?: Buffer
-  dest_string?: string
-  amt?: number
-  payment_hash?: Buffer
-  payment_hash_string?: number
-  payment_request?: string
-  final_cltv_delta?: number
-  fee_limit?: FeeLimit
+  destString?: string
+  amt?: Long
+  paymentHash?: Buffer
+  paymentHashString?: number
+  paymentRequest?: string
+  finalCltvDelta?: number
+  feeLimit?: FeeLimit
 }
 
 export type PaymentHash = {
-  r_hash_str?: string
-  r_hash?: Buffer
+  rHashStr?: string
+  rHash?: Buffer
 }
 
 export type ChannelBalanceResponse = {
-  balance: number
-  pending_open_balance: number
+  balance: Long
+  pendingOpenBalance: Long
 }
 
 export type ChannelBandwidthResponse = {
-  bandwidth: number
+  bandwidth: Long
 }
 
 export type WalletBalanceResponse = {
-  total_balance: number
-  confirmed_balance: number
-  unconfirmed_balance: number
+  totalBalance: Long
+  confirmedBalance: Long
+  unconfirmedBalance: Long
 }
 
 export type NewAddressResponse = {
@@ -196,17 +197,17 @@ export type NewAddressRequest = {
 
 export type PayReq = {
   destination: string
-  payment_hash: string
-  num_satoshis: number
-  timestamp: number
-  expiry: number
+  paymentHash: string
+  numSatoshis: Long
+  timestamp: Long
+  expiry: Long
   description: string
-  description_hash: string
-  fallback_addr: string
-  cltv_expiry: number
-  route_hints: Array<RouteHint>
+  descriptionHash: string
+  fallbackAddr: string
+  cltvExpiry: Long
+  routeHints: Array<RouteHint>
 }
 
 export type PayReqString = {
-  pay_req: string
+  payReq: string
 }
