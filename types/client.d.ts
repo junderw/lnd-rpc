@@ -1,12 +1,11 @@
-import * as grpc from 'grpc';
 import { RpcResponse } from './types';
 export declare class LightningRpc {
-    meta: grpc.Metadata;
-    mainRpc: any;
-    unlockerRpc: any;
-    domainPort: string;
-    credentials: grpc.ChannelCredentials;
-    lnrpc: any;
+    private __meta;
+    private __mainRpc;
+    private __unlockerRpc;
+    private __domainPort;
+    private __credentials;
+    private __lnrpc;
     constructor(tls_cert: string, macaroon_hex: string, domain_port?: string);
     static fromStrings(tls_cert: string, macaroon_hex: string, domain_port?: string): LightningRpc;
     static fromFilePaths(tls_cert_path: string, macaroon_path: string, domain_port?: string): LightningRpc;
