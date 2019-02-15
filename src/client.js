@@ -37,6 +37,11 @@ class LightningRpc {
         this.__mainRpc = null;
         this.__unlockerRpc = new this.__lnrpc.WalletUnlocker(this.__domainPort, this.__credentials);
     }
+    // WalletUnlocker service helper functions. Used for the gRPC server started at
+    // boot time for LND. Once a wallet has been unlocked/created/restored, toMain()
+    // should be called and the Lightning service should be used.
+    // (LND actually shuts down this gRPC server, and creates a new one, so toMain()
+    // must be called to get node-gRPC to re-connect to the new server.)
     async create(walletPw, aezeedPw) {
         assert(this.__unlockerRpc, 'create requires toUnlocker()');
         assert(walletPw, 'create requires a wallet unlock password');
@@ -47,13 +52,36 @@ class LightningRpc {
         await initWallet(this.__unlockerRpc, walletPw, cipherSeedMnemonic, aezeedPw);
         return { seed: cipherSeedMnemonic.join(' ') };
     }
+    async restore(aezeedStr, walletPw, aezeedPw) {
+        assert(this.__unlockerRpc, 'restore requires toUnlocker()');
+        assert(aezeedStr, 'restore requires aezeed phrase');
+        assert(walletPw, 'restore requires a wallet unlock password');
+        if (aezeedPw === undefined)
+            aezeedPw = 'aezeed';
+        const cipherSeedMnemonic = aezeedStr.split(/\s+/);
+        return initWallet(this.__unlockerRpc, walletPw, cipherSeedMnemonic, aezeedPw);
+    }
     async unlock(password) {
         assert(this.__unlockerRpc, 'unlock requires toUnlocker()');
         assert(password, 'unlock requires password');
         return new Promise((resolve, reject) => {
-            this.__unlockerRpc.unlockWallet({ walletPassword: Buffer.from(password, 'utf8') }, this.__meta, promiseFunction(resolve, reject));
+            this.__unlockerRpc.unlockWallet({ walletPassword: Buffer.from(password, 'utf8') }, promiseFunction(resolve, reject));
         });
     }
+    async changePassword(currentPassword, newPassword) {
+        assert(this.__unlockerRpc, 'changePassword requires toUnlocker()');
+        assert(currentPassword, 'changePassword requires oldPassword');
+        assert(newPassword, 'changePassword requires oldPassword');
+        return new Promise((resolve, reject) => {
+            this.__unlockerRpc.changePassword({
+                currentPassword: Buffer.from(currentPassword, 'utf8'),
+                newPassword: Buffer.from(newPassword, 'utf8')
+            }, promiseFunction(resolve, reject));
+        });
+    }
+    // Lightning service helper functions. Primarily just offering them all in
+    // async / await, but for some of the more common operations I will create
+    // helper functions for convenience.
     async send(payment_request) {
         assert(this.__mainRpc, 'send requires toMain()');
         let res = await this.sendPayment({ payment_request });
@@ -74,10 +102,10 @@ class LightningRpc {
         assert(this.__mainRpc, 'check requires toMain()');
         return this.lookupInvoice({ r_hash_str });
     }
-    async getInfo(opts) {
+    async getInfo() {
         assert(this.__mainRpc, 'getInfo requires toMain()');
         return new Promise((resolve, reject) => {
-            this.__mainRpc.getInfo(opts || {}, this.__meta, promiseFunction(resolve, reject));
+            this.__mainRpc.getInfo({}, this.__meta, promiseFunction(resolve, reject));
         });
     }
     async listChannels(opts) {
@@ -86,33 +114,47 @@ class LightningRpc {
             this.__mainRpc.listChannels(opts || {}, this.__meta, promiseFunction(resolve, reject));
         });
     }
-    async channelBalance(opts) {
+    async channelBalance() {
         assert(this.__mainRpc, 'channelBalance requires toMain()');
         return new Promise((resolve, reject) => {
-            this.__mainRpc.channelBalance(opts || {}, this.__meta, promiseFunction(resolve, reject));
+            this.__mainRpc.channelBalance({}, this.__meta, promiseFunction(resolve, reject));
         });
     }
     async channelBandwidth() {
         assert(this.__mainRpc, 'channelBandwidth requires toMain()');
         return this.listChannels({ active_only: true })
-            .then((channels) => ({
-            bandwidth: channels.reduce((total, item) => { return total + item.remote_balance; }, 0)
+            .then(response => ({
+            bandwidth: response.channels.reduce((total, item) => { return total + item.remote_balance; }, 0)
         }));
     }
-    async walletBalance(opts) {
+    async walletBalance() {
         assert(this.__mainRpc, 'walletBalance requires toMain()');
-        opts = opts || {};
-        if (opts.witness_only === undefined)
-            opts = Object.assign(opts, { witness_only: true });
         return new Promise((resolve, reject) => {
-            this.__mainRpc.walletBalance(opts, this.__meta, promiseFunction(resolve, reject));
+            this.__mainRpc.walletBalance({}, this.__meta, promiseFunction(resolve, reject));
         });
     }
     async newAddress(opts) {
         assert(this.__mainRpc, 'newAddress requires toMain()');
         opts = opts || {};
-        if (opts.type === undefined)
-            opts = Object.assign(opts, { type: 'np2wkh' });
+        if (opts.type === undefined) {
+            opts = Object.assign(opts, { type: 1 });
+        }
+        else {
+            switch (opts.type) {
+                case 'p2wkh':
+                    opts.type = 0;
+                    break;
+                case 'np2wkh':
+                    opts.type = 1;
+                    break;
+                case 0:
+                    break;
+                case 1:
+                    break;
+                default:
+                    throw new Error('newAddress type must be np2wkh or p2wkh');
+            }
+        }
         return new Promise((resolve, reject) => {
             this.__mainRpc.newAddress(opts, this.__meta, promiseFunction(resolve, reject));
         });
@@ -120,7 +162,7 @@ class LightningRpc {
     async openChannel(opts) {
         assert(this.__mainRpc, 'openChannel requires toMain()');
         assert(opts, 'openChannel requires opts');
-        assert(opts.node_pubkey_string, 'openChannel requires opts.node_pubkey_string');
+        assert(opts.node_pubkey || opts.node_pubkey_string, 'openChannel requires node_pubkey or string');
         assert(opts.local_funding_amount, 'openChannel requires opts.local_funding_amount');
         return new Promise((resolve, reject) => {
             this.__mainRpc.openChannelSync(opts, this.__meta, promiseFunction(resolve, reject));

@@ -4,7 +4,12 @@ import * as fs from 'fs'
 import * as grpc from 'grpc'
 import * as protoLoader from '@grpc/proto-loader'
 import * as lnPayReq from 'bolt11'
-import { RpcResponse } from './types'
+import { RpcResponse, CreateResponse, RestoreResponse,
+        UnlockResponse, ChangePasswordResponse, SendResponse, ChannelPoint,
+        RequestResponse, Invoice, GetInfoResponse, ListChannelsResponse,
+        ChannelBalanceResponse, ChannelBandwidthResponse, WalletBalanceResponse,
+        NewAddressResponse, PayReq, ListChannelsRequest, NewAddressRequest,
+        OpenChannelRequest, SendRequest, PaymentHash, PayReqString } from './types'
 
 export class LightningRpc {
   private __meta: grpc.Metadata
@@ -54,7 +59,13 @@ export class LightningRpc {
     this.__unlockerRpc = new this.__lnrpc.WalletUnlocker(this.__domainPort, this.__credentials)
   }
 
-  async create(walletPw: string, aezeedPw?: string): Promise<RpcResponse> {
+  // WalletUnlocker service helper functions. Used for the gRPC server started at
+  // boot time for LND. Once a wallet has been unlocked/created/restored, toMain()
+  // should be called and the Lightning service should be used.
+  // (LND actually shuts down this gRPC server, and creates a new one, so toMain()
+  // must be called to get node-gRPC to re-connect to the new server.)
+
+  async create(walletPw: string, aezeedPw?: string): Promise<CreateResponse> {
     assert(this.__unlockerRpc, 'create requires toUnlocker()')
     assert(walletPw, 'create requires a wallet unlock password')
     if (aezeedPw === undefined) aezeedPw = 'aezeed'
@@ -64,99 +75,141 @@ export class LightningRpc {
     return { seed: cipherSeedMnemonic.join(' ') }
   }
 
-  async unlock( password: string ): Promise<RpcResponse> {
+  async restore(aezeedStr: string, walletPw: string, aezeedPw?: string): Promise<RestoreResponse> {
+    assert(this.__unlockerRpc, 'restore requires toUnlocker()')
+    assert(aezeedStr, 'restore requires aezeed phrase')
+    assert(walletPw, 'restore requires a wallet unlock password')
+    if (aezeedPw === undefined) aezeedPw = 'aezeed'
+    const cipherSeedMnemonic = aezeedStr.split(/\s+/)
+    return initWallet(this.__unlockerRpc, walletPw, cipherSeedMnemonic, aezeedPw)
+  }
+
+  async unlock( password: string ): Promise<UnlockResponse> {
     assert(this.__unlockerRpc, 'unlock requires toUnlocker()')
     assert(password, 'unlock requires password')
     return new Promise((resolve, reject) => {
       this.__unlockerRpc.unlockWallet(
         { walletPassword: Buffer.from(password,'utf8') },
-        this.__meta,
         promiseFunction(resolve, reject)
       )
     })
   }
 
-  async send( payment_request: string ): Promise<RpcResponse> {
+  async changePassword( currentPassword: string, newPassword: string ): Promise<ChangePasswordResponse> {
+    assert(this.__unlockerRpc, 'changePassword requires toUnlocker()')
+    assert(currentPassword, 'changePassword requires oldPassword')
+    assert(newPassword, 'changePassword requires oldPassword')
+    return new Promise((resolve, reject) => {
+      this.__unlockerRpc.changePassword(
+        {
+          currentPassword: Buffer.from(currentPassword,'utf8'),
+          newPassword: Buffer.from(newPassword,'utf8')
+        },
+        promiseFunction(resolve, reject)
+      )
+    })
+  }
+
+  // Lightning service helper functions. Primarily just offering them all in
+  // async / await, but for some of the more common operations I will create
+  // helper functions for convenience.
+
+  async send( payment_request: string ): Promise<SendResponse> {
     assert(this.__mainRpc, 'send requires toMain()')
     let res = await this.sendPayment({ payment_request })
     return Object.assign(res, { decodedPayReq: lnPayReq.decode(payment_request) })
   }
 
-  async open( node_pubkey_string: string, local_funding_amount: number, push_sat: number ): Promise<RpcResponse> {
+  async open( node_pubkey_string: string, local_funding_amount: number, push_sat: number ): Promise<ChannelPoint> {
     assert(this.__mainRpc, 'open requires toMain()')
     let opts = {node_pubkey_string, local_funding_amount}
     if (push_sat !== undefined) opts = Object.assign(opts, { push_sat })
     return this.openChannel(opts)
   }
 
-  async request( satoshis: number ): Promise<RpcResponse> {
+  async request( satoshis: number ): Promise<RequestResponse> {
     assert(this.__mainRpc, 'request requires toMain()')
     return this.addInvoice({ value: satoshis })
   }
 
-  async check( r_hash_str: string ): Promise<RpcResponse> {
+  async check( r_hash_str: string ): Promise<Invoice> {
     assert(this.__mainRpc, 'check requires toMain()')
     return this.lookupInvoice({ r_hash_str })
   }
 
-  async getInfo (opts: any): Promise<RpcResponse> {
+  async getInfo (): Promise<GetInfoResponse> {
     assert(this.__mainRpc, 'getInfo requires toMain()')
     return new Promise((resolve, reject) => {
-      this.__mainRpc.getInfo(opts || {}, this.__meta, promiseFunction(resolve, reject))
+      this.__mainRpc.getInfo({}, this.__meta, promiseFunction(resolve, reject))
     })
   }
 
-  async listChannels (opts: any): Promise<Array<any>> {
+  async listChannels (opts: ListChannelsRequest): Promise<ListChannelsResponse> {
     assert(this.__mainRpc, 'listChannels requires toMain()')
     return new Promise((resolve, reject) => {
       this.__mainRpc.listChannels(opts || {}, this.__meta, promiseFunction(resolve, reject))
     })
   }
 
-  async channelBalance (opts: any): Promise<RpcResponse> {
+  async channelBalance (): Promise<ChannelBalanceResponse> {
     assert(this.__mainRpc, 'channelBalance requires toMain()')
     return new Promise((resolve, reject) => {
-      this.__mainRpc.channelBalance(opts || {}, this.__meta, promiseFunction(resolve, reject))
+      this.__mainRpc.channelBalance({}, this.__meta, promiseFunction(resolve, reject))
     })
   }
 
-  async channelBandwidth (): Promise<RpcResponse> {
+  async channelBandwidth (): Promise<ChannelBandwidthResponse> {
     assert(this.__mainRpc, 'channelBandwidth requires toMain()')
     return this.listChannels({active_only: true})
-      .then((channels: Array<any>) => ({
-        bandwidth: channels.reduce((total, item) => { return total + item.remote_balance }, 0)
+      .then(response => ({
+        bandwidth: response.channels.reduce((total, item) => { return total + item.remote_balance }, 0)
       }))
   }
 
-  async walletBalance (opts: any): Promise<RpcResponse> {
+  async walletBalance (): Promise<WalletBalanceResponse> {
     assert(this.__mainRpc, 'walletBalance requires toMain()')
-    opts = opts || {}
-    if (opts.witness_only === undefined) opts = Object.assign(opts, {witness_only: true})
     return new Promise((resolve, reject) => {
-      this.__mainRpc.walletBalance(opts, this.__meta, promiseFunction(resolve, reject))
+      this.__mainRpc.walletBalance({}, this.__meta, promiseFunction(resolve, reject))
     })
   }
 
-  async newAddress (opts: any): Promise<RpcResponse> {
+  async newAddress (opts: NewAddressRequest): Promise<NewAddressResponse> {
     assert(this.__mainRpc, 'newAddress requires toMain()')
     opts = opts || {}
-    if (opts.type === undefined) opts = Object.assign(opts, {type: 'np2wkh'})
+    if (opts.type === undefined) {
+      opts = Object.assign(opts, {type: 1})
+    } else {
+      switch (opts.type) {
+        case 'p2wkh':
+          opts.type = 0
+          break
+        case 'np2wkh':
+          opts.type = 1
+          break
+        case 0:
+          break
+        case 1:
+          break
+        default:
+          throw new Error('newAddress type must be np2wkh or p2wkh')
+      }
+    }
     return new Promise((resolve, reject) => {
       this.__mainRpc.newAddress(opts, this.__meta, promiseFunction(resolve, reject))
     })
   }
 
-  async openChannel (opts: any): Promise<RpcResponse> {
+  async openChannel (opts: OpenChannelRequest): Promise<ChannelPoint> {
     assert(this.__mainRpc, 'openChannel requires toMain()')
     assert(opts, 'openChannel requires opts')
-    assert(opts.node_pubkey_string, 'openChannel requires opts.node_pubkey_string')
+    assert(opts.node_pubkey || opts.node_pubkey_string, 'openChannel requires node_pubkey or string')
     assert(opts.local_funding_amount, 'openChannel requires opts.local_funding_amount')
     return new Promise((resolve, reject) => {
       this.__mainRpc.openChannelSync(opts, this.__meta, promiseFunction(resolve, reject))
     })
   }
 
-  async sendPayment (opts: any): Promise<RpcResponse> {
+  async sendPayment (opts: SendRequest): Promise<SendResponse> {
     assert(this.__mainRpc, 'sendPayment requires toMain()')
     assert(opts, 'sendPayment requires opts')
     assert(opts.payment_request, 'sendPayment requires opts.payment_request')
@@ -165,7 +218,7 @@ export class LightningRpc {
     })
   }
 
-  async addInvoice (opts: any): Promise<RpcResponse> {
+  async addInvoice (opts: Invoice): Promise<RequestResponse> {
     assert(this.__mainRpc, 'addInvoice requires toMain()')
     assert(opts, 'addInvoice requires opts')
     assert(opts.value, 'addInvoice requires opts.value')
@@ -174,7 +227,7 @@ export class LightningRpc {
     })
   }
 
-  async lookupInvoice (opts: any): Promise<RpcResponse> {
+  async lookupInvoice (opts: PaymentHash): Promise<Invoice> {
     assert(this.__mainRpc, 'lookupInvoice requires toMain()')
     assert(opts, 'lookupInvoice requires opts')
     assert(opts.r_hash_str, 'lookupInvoice requires opts.r_hash_str')
@@ -183,7 +236,7 @@ export class LightningRpc {
     })
   }
 
-  async decodePayReq (opts: any): Promise<RpcResponse> {
+  async decodePayReq (opts: PayReqString): Promise<PayReq> {
     assert(this.__mainRpc, 'decodePayReq requires toMain()')
     assert(opts, 'decodePayReq requires opts')
     assert(opts.pay_req, 'decodePayReq requires opts.pay_req')
