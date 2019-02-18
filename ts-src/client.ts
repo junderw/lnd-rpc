@@ -11,6 +11,7 @@ import { RpcResponse, CreateResponse, RestoreResponse,
         ChannelBalanceResponse, ChannelBandwidthResponse, WalletBalanceResponse,
         NewAddressResponse, PayReq, ListChannelsRequest, NewAddressRequest,
         OpenChannelRequest, SendRequest, PaymentHash, PayReqString } from './types'
+export * from './types'
 
 export class LightningRpc {
   private __meta: grpc.Metadata
@@ -279,20 +280,10 @@ async function sleep (ms: number): Promise<void> {
   return new Promise(r => setTimeout(r, ms))
 }
 
-function convertBufferToHex (response: RpcResponse): RpcResponse {
-  if (typeof response !== 'object') return response
-  Object.keys(response).forEach(key => {
-    if (response[key] instanceof Buffer) {
-      response[key] = (<Buffer>response[key]).toString('hex')
-    }
-  })
-  return response
-}
-
 function promiseFunction (resolve: (res: any)=>void, reject: (err: any)=>void) {
   return (err: Error, response: RpcResponse) => {
     if (err) reject(err)
-    else resolve(convertBufferToHex(response))
+    else resolve(response)
   }
 }
 

@@ -233,22 +233,12 @@ async function awaitReadyClient(client, timeout) {
 async function sleep(ms) {
     return new Promise(r => setTimeout(r, ms));
 }
-function convertBufferToHex(response) {
-    if (typeof response !== 'object')
-        return response;
-    Object.keys(response).forEach(key => {
-        if (response[key] instanceof Buffer) {
-            response[key] = response[key].toString('hex');
-        }
-    });
-    return response;
-}
 function promiseFunction(resolve, reject) {
     return (err, response) => {
         if (err)
             reject(err);
         else
-            resolve(convertBufferToHex(response));
+            resolve(response);
     };
 }
 async function genSeed(rpc, aezeedPw, entropy) {

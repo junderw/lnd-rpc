@@ -1,4 +1,5 @@
 import { CreateResponse, RestoreResponse, UnlockResponse, ChangePasswordResponse, SendResponse, ChannelPoint, RequestResponse, Invoice, GetInfoResponse, ListChannelsResponse, ChannelBalanceResponse, ChannelBandwidthResponse, WalletBalanceResponse, NewAddressResponse, PayReq, ListChannelsRequest, NewAddressRequest, OpenChannelRequest, SendRequest, PaymentHash, PayReqString } from './types';
+export * from './types';
 export declare class LightningRpc {
     private __meta;
     private __mainRpc;
