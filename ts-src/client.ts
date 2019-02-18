@@ -50,14 +50,25 @@ export class LightningRpc {
     return new LightningRpc(tlsCert, macaroonHex, domainPort)
   }
 
-  toMain(): void {
-    this.__unlockerRpc = null
-    this.__mainRpc = new this.__lnrpc.Lightning(this.__domainPort, this.__credentials)
+  async waitForReady(): Promise<void> {
+    let client: any
+    if (this.__unlockerRpc === null) client = this.__mainRpc
+    else if (this.__mainRpc === null) client = this.__unlockerRpc
+    await awaitConnection(client, 40) // 40 retries x 500 ms
   }
 
-  toUnlocker(): void {
+  async toMain(): Promise<void> {
+    this.__unlockerRpc.close()
+    this.__unlockerRpc = null
+    this.__mainRpc = new this.__lnrpc.Lightning(this.__domainPort, this.__credentials)
+    await awaitConnection(this.__mainRpc, 40) // 40 retries x 500 ms
+  }
+
+  async toUnlocker(): Promise<void> {
+    this.__mainRpc.close()
     this.__mainRpc = null
     this.__unlockerRpc = new this.__lnrpc.WalletUnlocker(this.__domainPort, this.__credentials)
+    await awaitConnection(this.__unlockerRpc, 40) // 40 retries x 500 ms
   }
 
   // WalletUnlocker service helper functions. Used for the gRPC server started at
@@ -249,7 +260,27 @@ export class LightningRpc {
   }
 }
 
+async function awaitConnection (client: any, maxRetries: number): Promise<void> {
+  let retries = 0
+  while (!(await awaitReadyClient(client, 500))) {
+    if (retries >= maxRetries) throw new Error('Couldn\'t connect to the gRPC server.')
+    await sleep(500)
+    retries++
+  }
+}
+
+async function awaitReadyClient (client: any, timeout: number): Promise<boolean> {
+  return (new Promise((resolve, reject) => {
+    client.waitForReady(timeout, promiseFunction(resolve, reject))
+  })).then(() => true, () => false)
+}
+
+async function sleep (ms: number): Promise<void> {
+  return new Promise(r => setTimeout(r, ms))
+}
+
 function convertBufferToHex (response: RpcResponse): RpcResponse {
+  if (typeof response !== 'object') return response
   Object.keys(response).forEach(key => {
     if (response[key] instanceof Buffer) {
       response[key] = (<Buffer>response[key]).toString('hex')

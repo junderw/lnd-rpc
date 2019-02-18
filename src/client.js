@@ -30,13 +30,25 @@ class LightningRpc {
         const macaroonHex = fs.readFileSync(macaroonPath).toString('hex');
         return new LightningRpc(tlsCert, macaroonHex, domainPort);
     }
-    toMain() {
+    async waitForReady() {
+        let client;
+        if (this.__unlockerRpc === null)
+            client = this.__mainRpc;
+        else if (this.__mainRpc === null)
+            client = this.__unlockerRpc;
+        await awaitConnection(client, 40); // 40 retries x 500 ms
+    }
+    async toMain() {
+        this.__unlockerRpc.close();
         this.__unlockerRpc = null;
         this.__mainRpc = new this.__lnrpc.Lightning(this.__domainPort, this.__credentials);
+        await awaitConnection(this.__mainRpc, 40); // 40 retries x 500 ms
     }
-    toUnlocker() {
+    async toUnlocker() {
+        this.__mainRpc.close();
         this.__mainRpc = null;
         this.__unlockerRpc = new this.__lnrpc.WalletUnlocker(this.__domainPort, this.__credentials);
+        await awaitConnection(this.__unlockerRpc, 40); // 40 retries x 500 ms
     }
     // WalletUnlocker service helper functions. Used for the gRPC server started at
     // boot time for LND. Once a wallet has been unlocked/created/restored, toMain()
@@ -204,7 +216,26 @@ class LightningRpc {
     }
 }
 exports.LightningRpc = LightningRpc;
+async function awaitConnection(client, maxRetries) {
+    let retries = 0;
+    while (!(await awaitReadyClient(client, 500))) {
+        if (retries >= maxRetries)
+            throw new Error('Couldn\'t connect to the gRPC server.');
+        await sleep(500);
+        retries++;
+    }
+}
+async function awaitReadyClient(client, timeout) {
+    return (new Promise((resolve, reject) => {
+        client.waitForReady(timeout, promiseFunction(resolve, reject));
+    })).then(() => true, () => false);
+}
+async function sleep(ms) {
+    return new Promise(r => setTimeout(r, ms));
+}
 function convertBufferToHex(response) {
+    if (typeof response !== 'object')
+        return response;
     Object.keys(response).forEach(key => {
         if (response[key] instanceof Buffer) {
             response[key] = response[key].toString('hex');

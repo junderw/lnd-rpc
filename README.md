@@ -13,11 +13,14 @@ const LndRpc = lndRpc.LightningRpc.fromFilePaths(
 
 // unlock an existing wallet and getinfo
 async function unlockExisting() {
+  // wait for the gRPC connection to be ready
+  await LndRpc.waitForReady()
   // default RPC is wallet unlocking service
   await LndRpc.unlock("superP@$$word") // don't use this password :-P
 
   // toMain() switches RPC from wallet unlocker to the main RPC.
-  LndRpc.toMain()
+  // it will wait until the connection is ready
+  await LndRpc.toMain()
 
   let results = await LndRpc.getInfo()
   console.log(results)
@@ -34,6 +37,8 @@ unlockExisting().catch(console.error)
 
 // OR create a new wallet from scratch
 async function createNew() {
+  // wait for the gRPC connection to be ready
+  await LndRpc.waitForReady()
   // first arg is the unlock password.
   // second arg is the aezeed password. (optional)
   const { seed } = await LndRpc.create("superP@$$word")
@@ -43,7 +48,8 @@ async function createNew() {
   // seed = 'above snack regret marine version sketch assist word solve item quality burst detect cake net bulb mammal episode give cherry churn romance tag word'
 
   // toMain() switches RPC from wallet unlocker to the main RPC.
-  LndRpc.toMain()
+  // it will wait until the connection is ready
+  await LndRpc.toMain()
 
   let results = await LndRpc.getInfo()
   console.log(results)

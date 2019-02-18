@@ -9,8 +9,9 @@ export declare class LightningRpc {
     constructor(tlsCert: string, macaroonHex: string, domainPort?: string);
     static fromStrings(tlsCert: string, macaroonHex: string, domainPort?: string): LightningRpc;
     static fromFilePaths(tlsCertPath: string, macaroonPath: string, domainPort?: string): LightningRpc;
-    toMain(): void;
-    toUnlocker(): void;
+    waitForReady(): Promise<void>;
+    toMain(): Promise<void>;
+    toUnlocker(): Promise<void>;
     create(walletPw: string, aezeedPw?: string): Promise<CreateResponse>;
     restore(aezeedStr: string, walletPw: string, aezeedPw?: string): Promise<RestoreResponse>;
     unlock(password: string): Promise<UnlockResponse>;
