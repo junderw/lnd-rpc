@@ -52,13 +52,12 @@ export class LightningRpc {
   }
 
   async waitForReady(): Promise<void> {
-    let client: any
-    if (this.__unlockerRpc === null) client = this.__mainRpc
-    else if (this.__mainRpc === null) client = this.__unlockerRpc
+    let client: any = this.__unlockerRpc || this.__mainRpc
     await awaitConnection(client, 40) // 40 retries x 500 ms
   }
 
   async toMain(): Promise<void> {
+    if (this.__unlockerRpc === null && this.__mainRpc !== null) return
     this.__unlockerRpc.close()
     this.__unlockerRpc = null
     this.__mainRpc = new this.__lnrpc.Lightning(this.__domainPort, this.__credentials)
@@ -66,6 +65,7 @@ export class LightningRpc {
   }
 
   async toUnlocker(): Promise<void> {
+    if (this.__mainRpc === null && this.__unlockerRpc !== null) return
     this.__mainRpc.close()
     this.__mainRpc = null
     this.__unlockerRpc = new this.__lnrpc.WalletUnlocker(this.__domainPort, this.__credentials)
@@ -81,10 +81,12 @@ export class LightningRpc {
   async create(walletPw: string, aezeedPw?: string): Promise<CreateResponse> {
     assert(this.__unlockerRpc, 'create requires toUnlocker()')
     assert(walletPw, 'create requires a wallet unlock password')
+    await this.waitForReady()
     if (aezeedPw === undefined) aezeedPw = 'aezeed'
     const result = await genSeed(this.__unlockerRpc, aezeedPw)
     const cipherSeedMnemonic = result.cipherSeedMnemonic
     await initWallet(this.__unlockerRpc, walletPw, cipherSeedMnemonic, aezeedPw)
+    await this.toMain()
     return { seed: cipherSeedMnemonic.join(' ') }
   }
 
@@ -92,27 +94,34 @@ export class LightningRpc {
     assert(this.__unlockerRpc, 'restore requires toUnlocker()')
     assert(aezeedStr, 'restore requires aezeed phrase')
     assert(walletPw, 'restore requires a wallet unlock password')
+    await this.waitForReady()
     if (aezeedPw === undefined) aezeedPw = 'aezeed'
     const cipherSeedMnemonic = aezeedStr.split(/\s+/)
-    return initWallet(this.__unlockerRpc, walletPw, cipherSeedMnemonic, aezeedPw)
+    const result = await initWallet(this.__unlockerRpc, walletPw, cipherSeedMnemonic, aezeedPw)
+    await this.toMain()
+    return result
   }
 
   async unlock( password: string ): Promise<UnlockResponse> {
     assert(this.__unlockerRpc, 'unlock requires toUnlocker()')
     assert(password, 'unlock requires password')
-    return new Promise((resolve, reject) => {
+    await this.waitForReady()
+    const result = await (new Promise((resolve, reject) => {
       this.__unlockerRpc.unlockWallet(
         { walletPassword: Buffer.from(password,'utf8') },
         promiseFunction(resolve, reject)
       )
-    })
+    }))
+    await this.toMain()
+    return result
   }
 
   async changePassword( currentPassword: string, newPassword: string ): Promise<ChangePasswordResponse> {
     assert(this.__unlockerRpc, 'changePassword requires toUnlocker()')
     assert(currentPassword, 'changePassword requires oldPassword')
     assert(newPassword, 'changePassword requires oldPassword')
-    return new Promise((resolve, reject) => {
+    await this.waitForReady()
+    const result = await (new Promise((resolve, reject) => {
       this.__unlockerRpc.changePassword(
         {
           currentPassword: Buffer.from(currentPassword,'utf8'),
@@ -120,7 +129,9 @@ export class LightningRpc {
         },
         promiseFunction(resolve, reject)
       )
-    })
+    }))
+    await this.toMain()
+    return result
   }
 
   // Lightning service helper functions. Primarily just offering them all in

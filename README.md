@@ -2,6 +2,26 @@
 
 This library is for accessing LND via grpc using NodeJS.
 
+Written in TypeScript. JS files committed for versioning history.
+
+## LND Version Targeted
+
+`0.5.2-beta`
+
+## Warning
+
+This library is still under heavy development. Breaking changes in patch updates will be common, so please do not use `^` based dependencies. If possible specify an exact version.
+
+ie. Your package.json should use `"lnd-rpc": "0.0.5",` instead of `"lnd-rpc": "^0.0.5",`
+
+## Pull Requests Welcome
+
+I am aware that a month ago someone made a library similar to this that uses a generator to automate type definition generation.
+
+Down the road this library might do something similar, but for now this is primarily focused on creating a usable, easy to understand interface for communicating with LND through helper functions that simplify the usage for the library consumer.
+
+When making a pull request, edit the TypeScript in ts-src and then run `npm run build` to make sure the changes are reflected in the definitions and the JS files. Check the diff for anything you didn't intend, then submit the pull request. type definitions and JS files must also be committed.
+
 ## Simple usage etc. (Will add more later)
 
 ```javascript
@@ -13,14 +33,8 @@ const LndRpc = lndRpc.LightningRpc.fromFilePaths(
 
 // unlock an existing wallet and getinfo
 async function unlockExisting() {
-  // wait for the gRPC connection to be ready
-  await LndRpc.waitForReady()
   // default RPC is wallet unlocking service
   await LndRpc.unlock("superP@$$word") // don't use this password :-P
-
-  // toMain() switches RPC from wallet unlocker to the main RPC.
-  // it will wait until the connection is ready
-  await LndRpc.toMain()
 
   let results = await LndRpc.getInfo()
   console.log(results)
@@ -37,8 +51,6 @@ unlockExisting().catch(console.error)
 
 // OR create a new wallet from scratch
 async function createNew() {
-  // wait for the gRPC connection to be ready
-  await LndRpc.waitForReady()
   // first arg is the unlock password.
   // second arg is the aezeed password. (optional)
   const { seed } = await LndRpc.create("superP@$$word")
@@ -46,10 +58,6 @@ async function createNew() {
   // you need the aezeed + aezeed password...
   // OR the unlock password + your wallet.db file to unlock your on chain funds.
   // seed = 'above snack regret marine version sketch assist word solve item quality burst detect cake net bulb mammal episode give cherry churn romance tag word'
-
-  // toMain() switches RPC from wallet unlocker to the main RPC.
-  // it will wait until the connection is ready
-  await LndRpc.toMain()
 
   let results = await LndRpc.getInfo()
   console.log(results)
