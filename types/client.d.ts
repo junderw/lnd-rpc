@@ -10,9 +10,18 @@ export declare class LightningRpc {
     constructor(tlsCert: string, macaroonHex: string, domainPort?: string);
     static fromStrings(tlsCert: string, macaroonHex: string, domainPort?: string): LightningRpc;
     static fromFilePaths(tlsCertPath: string, macaroonPath: string, domainPort?: string): LightningRpc;
+    private isMain;
+    private isUnlocker;
+    private isServerDownMain;
+    private isServerDownUnlocker;
+    private hasServiceMain;
+    private hasServiceUnlocker;
     waitForReady(): Promise<void>;
     toMain(): Promise<void>;
     toUnlocker(): Promise<void>;
+    isServerDown(): Promise<boolean>;
+    getRemoteService(): Promise<string>;
+    getLocalService(): string;
     create(walletPw: string, aezeedPw?: string): Promise<CreateResponse>;
     restore(aezeedStr: string, walletPw: string, aezeedPw?: string): Promise<RestoreResponse>;
     unlock(password: string): Promise<UnlockResponse>;
@@ -32,4 +41,5 @@ export declare class LightningRpc {
     addInvoice(opts: Invoice): Promise<RequestResponse>;
     lookupInvoice(opts: PaymentHash): Promise<Invoice>;
     decodePayReq(opts: PayReqString): Promise<PayReq>;
+    stopDaemon(): Promise<void>;
 }

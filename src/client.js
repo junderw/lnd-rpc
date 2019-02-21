@@ -7,6 +7,8 @@ const grpc = require("grpc");
 const protoLoader = require("@grpc/proto-loader");
 const Long = require("long");
 const lnPayReq = require("bolt11");
+const CONNECTION_ERROR = 'Connection Failed: Check if LND is running and ' +
+    'gRPC is listening on the correct port.';
 class LightningRpc {
     constructor(tlsCert, macaroonHex, domainPort) {
         this.__domainPort = domainPort || '127.0.0.1:10009';
@@ -22,6 +24,7 @@ class LightningRpc {
         this.__mainRpc = null;
         this.__unlockerRpc = new this.__lnrpc.WalletUnlocker(this.__domainPort, this.__credentials);
     }
+    // static methods
     static fromStrings(tlsCert, macaroonHex, domainPort) {
         return new LightningRpc(tlsCert.replace(/[\r\n]/g, ''), macaroonHex, domainPort);
     }
@@ -30,12 +33,72 @@ class LightningRpc {
         const macaroonHex = fs.readFileSync(macaroonPath).toString('hex');
         return new LightningRpc(tlsCert, macaroonHex, domainPort);
     }
+    // private methods
+    isMain() {
+        return this.__unlockerRpc === null && this.__mainRpc !== null;
+    }
+    isUnlocker() {
+        return this.__mainRpc === null && this.__unlockerRpc !== null;
+    }
+    async isServerDownMain() {
+        return this.getInfo().then(() => false, err => {
+            switch (err.code) {
+                // Error: 14 UNAVAILABLE: Connect Failed
+                // RPC server is not listening. Fail.
+                case 14:
+                    return true;
+                default:
+                    return false;
+            }
+        });
+    }
+    async isServerDownUnlocker() {
+        return genSeed(this.__unlockerRpc).then(() => false, err => {
+            switch (err.code) {
+                // Error: 14 UNAVAILABLE: Connect Failed
+                // RPC server is not listening. Fail.
+                case 14:
+                    return true;
+                default:
+                    return false;
+            }
+        });
+    }
+    async hasServiceMain() {
+        return this.getInfo().then(() => 1, err => {
+            switch (err.code) {
+                // Error: 12 UNIMPLEMENTED: unknown service lnrpc.Lightning
+                case 12:
+                    return 0;
+                // Error: 14 UNAVAILABLE: Connect Failed
+                case 14:
+                    return -1; // Throw Error
+                default:
+                    return 1;
+            }
+        });
+    }
+    async hasServiceUnlocker() {
+        return genSeed(this.__unlockerRpc).then(() => 1, err => {
+            switch (err.code) {
+                // Error: 12 UNIMPLEMENTED: unknown service lnrpc.WalletUnlocker
+                case 12:
+                    return 0;
+                // Error: 14 UNAVAILABLE: Connect Failed
+                case 14:
+                    return -1; // Throw Error
+                default:
+                    return 1;
+            }
+        });
+    }
+    // public methods
     async waitForReady() {
         let client = this.__unlockerRpc || this.__mainRpc;
         await awaitConnection(client, 40); // 40 retries x 500 ms
     }
     async toMain() {
-        if (this.__unlockerRpc === null && this.__mainRpc !== null)
+        if (this.isMain())
             return;
         this.__unlockerRpc.close();
         this.__unlockerRpc = null;
@@ -43,12 +106,49 @@ class LightningRpc {
         await awaitConnection(this.__mainRpc, 40); // 40 retries x 500 ms
     }
     async toUnlocker() {
-        if (this.__mainRpc === null && this.__unlockerRpc !== null)
+        if (this.isUnlocker())
             return;
         this.__mainRpc.close();
         this.__mainRpc = null;
         this.__unlockerRpc = new this.__lnrpc.WalletUnlocker(this.__domainPort, this.__credentials);
         await awaitConnection(this.__unlockerRpc, 40); // 40 retries x 500 ms
+    }
+    async isServerDown() {
+        if (this.isMain()) {
+            return this.isServerDownMain();
+        }
+        else {
+            return this.isServerDownUnlocker();
+        }
+    }
+    // This is extremely hacky, but until LND supports the gRPC Server Reflection
+    // This is really the only way to query which service LND is currently serving
+    async getRemoteService() {
+        const startTime = new Date().getTime();
+        let remoteIsMain;
+        if (this.isMain()) {
+            let result = await this.hasServiceMain();
+            if (result === -1)
+                throw new Error(CONNECTION_ERROR);
+            remoteIsMain = result === 1;
+        }
+        else {
+            let result = await this.hasServiceUnlocker();
+            if (result === -1)
+                throw new Error(CONNECTION_ERROR);
+            remoteIsMain = result === 0;
+        }
+        const endTime = new Date().getTime();
+        console.log((endTime - startTime) + ' ms');
+        return remoteIsMain ? 'main' : 'unlocker';
+    }
+    getLocalService() {
+        if (this.isUnlocker()) {
+            return 'unlocker';
+        }
+        else {
+            return 'main';
+        }
     }
     // WalletUnlocker service helper functions. Used for the gRPC server started at
     // boot time for LND. Once a wallet has been unlocked/created/restored, toMain()
@@ -223,6 +323,12 @@ class LightningRpc {
         assert(opts.payReq, 'decodePayReq requires opts.payReq');
         return new Promise((resolve, reject) => {
             this.__mainRpc.decodePayReq(opts, this.__meta, promiseFunction(resolve, reject));
+        });
+    }
+    async stopDaemon() {
+        assert(this.__mainRpc, 'stopDaemon requires toMain()');
+        return new Promise((resolve, reject) => {
+            this.__mainRpc.stopDaemon({}, this.__meta, promiseFunction(resolve, reject));
         });
     }
 }
