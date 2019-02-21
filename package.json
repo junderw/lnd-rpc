@@ -1,6 +1,6 @@
 {
   "name": "lnd-rpc",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "description": "",
   "main": "src/client.js",
   "types": "types/client.d.ts",
