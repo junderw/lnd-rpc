@@ -71,4 +71,18 @@ async function createNew() {
   version: '0.5.2-beta commit=' } */
 }
 createNew().catch(console.error)
+
+// OR check which service LND is currently serving
+async function checkService() {
+  // 'main' OR 'unlocker' OR it throws an Error if it can't find a listening server
+  console.log(await LndRpc.getRemoteService())
+  // 'main' OR 'unlocker'. It is not async.
+  // If remote and local are mismatched, you can use toMain() or toUnlocker()
+  // to switch your local to match the server.
+  console.log(LndRpc.getLocalService())
+
+  // true OR false. This will let you know if there is no listening server
+  console.log(await LndRpc.isServerDown())
+}
+checkService().catch(console.error)
 ```

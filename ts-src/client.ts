@@ -165,8 +165,6 @@ export class LightningRpc {
   // This is extremely hacky, but until LND supports the gRPC Server Reflection
   // This is really the only way to query which service LND is currently serving
   async getRemoteService(): Promise<string> {
-    const startTime = new Date().getTime()
-
     let remoteIsMain: boolean
     if (this.isMain()) {
       let result = await this.hasServiceMain()
@@ -178,8 +176,6 @@ export class LightningRpc {
       remoteIsMain = result === 0
     }
 
-    const endTime = new Date().getTime()
-    console.log((endTime - startTime) + ' ms')
     return remoteIsMain ? 'main' : 'unlocker'
   }
 
