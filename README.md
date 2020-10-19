@@ -6,7 +6,7 @@ Written in TypeScript. JS files committed for versioning history.
 
 ## LND Version Targeted
 
-`0.5.2-beta`
+`0.11.1-beta`
 
 ## Warning
 
